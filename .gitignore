@@ -1,0 +1,6 @@
+# Segredos — NUNCA commitar
+.env
+
+# Logs e temporários
+*.log
+/tmp/

@@ -1,0 +1,65 @@
+# =============================================================================
+# chatailscale — Open WebUI + Ollama (embeddings) + Modal (GPU Kimi K3)
+#
+# Decisões (por quê):
+#  - Bind 127.0.0.1: o Docker ignora o UFW (chain DOCKER do iptables é
+#    avaliada antes do INPUT). Publicar "8080:8080" abriria a porta na
+#    internet pública mesmo com firewall deny-all. Aqui, só o host alcança;
+#    quem expõe é o `tailscale serve`.
+#  - Sem segredo hardcoded: a chave vem do .env (gitignored).
+#  - Ollama é OPCIONAL (profile local-ollama): o install.sh reutiliza o
+#    container btv-ollama quando ele já existe na VPS (rede btv-prod-net).
+#  - Telemetria desligada com as variáveis oficiais do Open WebUI.
+#  - Sem "version:" (obsoleto no Compose v2).
+# =============================================================================
+
+name: chatailscale
+
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: always
+    ports:
+      - "127.0.0.1:${WEBUI_PORT:-8080}:8080"
+    volumes:
+      - open-webui_data:/app/backend/data
+    environment:
+      # Telemetria desligada (nomes oficiais)
+      ANONYMIZED_TELEMETRY: "False"
+      SCARF_NO_ANALYTICS: "True"
+      DO_NOT_TRACK: "True"
+      WEBUI_NAME: "${WEBUI_NAME:-Chat Privado}"
+      # Preenchido pelo install.sh: btv-ollama (reuso) ou ollama (local)
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://ollama:11434}"
+      # GPU sob demanda no Modal (endpoint OpenAI-compatível do Kimi K3)
+      OPENAI_API_BASE_URL: "${OPENAI_API_BASE_URL:-}"
+      OPENAI_API_KEY: "${MODAL_API_KEY:-}"
+    networks:
+      - app
+      - btv-prod-net
+
+  # Só sobe com: docker compose --profile local-ollama up -d
+  # (o install.sh decide automaticamente)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: chatailscale-ollama
+    restart: always
+    profiles: ["local-ollama"]
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - app
+    # Sem porta publicada: só a rede interna enxerga
+
+networks:
+  app:
+    driver: bridge
+  # Rede compartilhada da VPS (btv-ollama e demais projetos).
+  # O install.sh a cria automaticamente se não existir.
+  btv-prod-net:
+    external: true
+
+volumes:
+  open-webui_data:
+  ollama_data:
