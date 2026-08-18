@@ -39,7 +39,8 @@ Decisões de segurança embutidas:
 
 ## Pré-requisitos
 
-- VPS Ubuntu/Debian com acesso SSH e um usuário com sudo
+- VPS Ubuntu/Debian com acesso SSH (root **ou** usuário com sudo — o script
+  detecta e se adapta; o recomendado é usuário com sudo)
 - Conta Tailscale (mesma conta no PC e na VPS)
 - Endpoint e chave do Modal (GPU com Kimi K3 já configurada)
 
@@ -51,6 +52,10 @@ cd chatailscale
 chmod +x install.sh wipe.sh
 ./install.sh
 ```
+
+> **Rodando como root?** Funciona — o script dispensa o `sudo` sozinho e só
+> mostra um aviso. O recomendado em produção é um usuário com sudo:
+> `adduser btv && usermod -aG sudo,docker btv && su - btv`
 
 O script é idempotente (pode rodar de novo sem quebrar nada) e faz:
 
@@ -80,7 +85,7 @@ O script é idempotente (pode rodar de novo sem quebrar nada) e faz:
 
 | Arquivo | Função |
 |---|---|
-| `install.sh` | Instalador turnkey (idempotente) |
+| `install.sh` | Instalador turnkey (idempotente, aceita root ou sudo) |
 | `wipe.sh` | Data wipe: apaga containers, volumes, PDFs e vetores deste stack |
 | `docker-compose.yml` | Open WebUI + Ollama opcional (profile `local-ollama`) |
 | `.env.example` | Modelo de configuração — copie para `.env` |
@@ -92,7 +97,7 @@ O script é idempotente (pode rodar de novo sem quebrar nada) e faz:
 docker compose logs -f open-webui     # acompanhar logs
 docker compose ps                     # estado dos containers
 docker exec btv-ollama ollama list    # modelos disponíveis no Ollama
-sudo tailscale serve status           # URL pública da tailnet
+tailscale serve status                # URL pública da tailnet (como root, sem sudo)
 docker compose pull && docker compose up -d   # atualizar imagens
 ```
 
