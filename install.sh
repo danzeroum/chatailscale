@@ -75,6 +75,12 @@ ok "Tailscale ativo — IP interno $(tailscale ip -4 2>/dev/null || echo '(verif
 
 # ---------- 3. .env (segredos fora do git) ----------
 [[ -f .env ]] || { cp .env.example .env; log ".env criado a partir do .env.example"; }
+# Valida a sintaxe ANTES de carregar: valor com espaço SEM aspas quebra o
+# `source` (ex.: WEBUI_NAME=Chat Privado → bash tenta executar "Privado").
+if ! (source .env) 2>/dev/null; then
+  warn ".env com sintaxe inválida — recriando a partir do .env.example"
+  cp .env.example .env
+fi
 # shellcheck disable=SC1091
 source .env
 if [[ -z "${MODAL_API_KEY:-}" ]]; then
@@ -132,12 +138,17 @@ if [[ "$RESP" =~ ^[Ss]$ ]]; then
   ok "UFW ativo: SSH:$SSH_PORT + 80/443 + tailscale0. O WebUI não depende do UFW (bind 127.0.0.1)."
 fi
 
-# ---------- 9. Publicar APENAS na tailnet ----------
+# ---------- 9. Publicar APENAS na tailnet (não-fatal se falhar) ----------
 WEBUI_PORT=${WEBUI_PORT:-8080}
 read -r -p "Publicar o chat na sua tailnet via tailscale serve? [S/n] " RESP; RESP=${RESP:-S}
 if [[ "$RESP" =~ ^[Ss]$ ]]; then
-  $SUDO tailscale serve --bg "http://127.0.0.1:$WEBUI_PORT"
-  ok "tailscale serve ativo (HTTPS válido no domínio ts.net)"
+  if $SUDO tailscale serve --bg "http://127.0.0.1:$WEBUI_PORT"; then
+    ok "tailscale serve ativo (HTTPS válido no domínio ts.net)"
+  else
+    warn "tailscale serve falhou. Ative HTTPS na tailnet em:"
+    warn "  https://login.tailscale.com/admin/dns  (MagicDNS + HTTPS Certificates)"
+    warn "  e depois rode: $SUDO tailscale serve --bg http://127.0.0.1:$WEBUI_PORT"
+  fi
 fi
 
 # ---------- 10. Verificação ----------
@@ -157,4 +168,5 @@ ok "Instalação concluída!"
 $SUDO tailscale serve status 2>/dev/null || true
 echo
 echo "No PC (com o Tailscale ligado), abra a URL https acima."
+echo "Se o serve não estiver ativo, use o IP direto: http://$(tailscale ip -4 2>/dev/null):$WEBUI_PORT"
 echo "Depois: Sign Up → Admin Settings → Documents → Embedding Model → nomic-embed-text"
