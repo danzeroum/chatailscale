@@ -49,8 +49,7 @@ Decisões de segurança embutidas:
 ```bash
 git clone https://github.com/danzeroum/chatailscale.git
 cd chatailscale
-chmod +x install.sh wipe.sh
-./install.sh
+bash install.sh
 ```
 
 > **Rodando como root?** Funciona — o script dispensa o `sudo` sozinho e só
@@ -65,7 +64,8 @@ O script é idempotente (pode rodar de novo sem quebrar nada) e faz:
 4. Garante a rede Docker `btv-prod-net`
 5. Detecta o `btv-ollama` já existente e o reutiliza; senão, sobe um Ollama
    dedicado deste stack (`chatailscale-ollama`, sem porta pública)
-6. Sobe o Open WebUI com bind em `127.0.0.1:8080`
+6. Sobe o Open WebUI com bind em `127.0.0.1:8080` (com fallback de registry:
+   GHCR → Docker Hub oficial, ver Troubleshooting)
 7. Baixa o `nomic-embed-text` (~270 MB) — embeddings de PDF na CPU
 8. (Opcional) Configura o UFW **sem derrubar seus sites**: detecta a porta SSH
    real, libera 80/443 para o nginx e o resto só via tailscale0
@@ -101,13 +101,39 @@ tailscale serve status                # URL pública da tailnet (como root, sem 
 docker compose pull && docker compose up -d   # atualizar imagens
 ```
 
-Se a porta 8080 já estiver em uso no host (`ss -tlnp | grep 8080`), mude
-`WEBUI_PORT` no `.env` e rode `./install.sh` de novo.
+## Troubleshooting
+
+**`error from registry: denied` ao baixar a imagem (ghcr.io)**
+Quase sempre é credencial expirada do GHCR em `~/.docker/config.json` (comum
+em VPS onde já houve `docker login`). O instalador trata sozinho: limpa a
+credencial, tenta de novo e, se o GHCR seguir indisponível, baixa a imagem
+oficial do Docker Hub (`openwebui/open-webui`) e cria uma tag alias. Manual:
+
+```bash
+docker logout ghcr.io && docker pull ghcr.io/open-webui/open-webui:main
+# ou o fallback:
+docker pull openwebui/open-webui:main
+docker tag openwebui/open-webui:main ghcr.io/open-webui/open-webui:main
+```
+
+**Porta 8080 já em uso** (`ss -tlnp | grep 8080`)
+Mude `WEBUI_PORT` no `.env` e rode `bash install.sh` de novo.
+
+**`tailscale serve` falhou**
+Ative HTTPS na tailnet em https://login.tailscale.com/admin/dns (MagicDNS +
+HTTPS Certificates) e repita: `tailscale serve --bg http://127.0.0.1:8080`.
+Sem o serve, o acesso direto pelo IP da tailnet NÃO funciona (bind em
+127.0.0.1) — use túnel SSH a partir do PC:
+`ssh -L 8080:127.0.0.1:8080 <usuario>@<vps>` e abra http://localhost:8080.
+
+**WebUI não responde no health check**
+Veja os logs: `docker compose logs -f open-webui`. Na primeira subida a
+imagem tem ~1–2 GB e a inicialização pode levar alguns minutos.
 
 ## Data wipe (fim de contrato)
 
 ```bash
-./wipe.sh
+bash wipe.sh
 ```
 
 Destrói containers e volumes **deste stack** (banco do Open WebUI, PDFs,

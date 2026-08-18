@@ -114,6 +114,22 @@ fi
 sed -i "s|^OLLAMA_BASE_URL=.*|OLLAMA_BASE_URL=$OLLAMA_URL|" .env
 
 # ---------- 6. Subir o stack ----------
+# Baixa a imagem ANTES do up para tratar falha de registry:
+# "error from registry: denied" no ghcr.io quase sempre é credencial expirada
+# em ~/.docker/config.json. Estratégia: limpar credencial → tentar de novo →
+# fallback para a imagem OFICIAL no Docker Hub (openwebui/open-webui) com tag alias.
+WEBUI_IMAGE="ghcr.io/open-webui/open-webui:main"
+log "Baixando a imagem do Open WebUI..."
+if ! $DOCKER pull "$WEBUI_IMAGE"; then
+  warn "Pull do GHCR negado — removendo credencial possivelmente expirada de ghcr.io"
+  warn "(se você usa 'docker login ghcr.io' para outros projetos, refaça o login depois)"
+  $DOCKER logout ghcr.io >/dev/null 2>&1 || true
+  if ! $DOCKER pull "$WEBUI_IMAGE"; then
+    warn "GHCR indisponível — fallback para a imagem oficial no Docker Hub"
+    $DOCKER pull openwebui/open-webui:main
+    $DOCKER tag openwebui/open-webui:main "$WEBUI_IMAGE"
+  fi
+fi
 log "Subindo containers..."
 $DOCKER compose ${PROFILE_ARGS[@]+"${PROFILE_ARGS[@]}"} up -d
 ok "Stack no ar"
@@ -168,5 +184,5 @@ ok "Instalação concluída!"
 $SUDO tailscale serve status 2>/dev/null || true
 echo
 echo "No PC (com o Tailscale ligado), abra a URL https acima."
-echo "Se o serve não estiver ativo, use o IP direto: http://$(tailscale ip -4 2>/dev/null):$WEBUI_PORT"
+echo "Fallback sem serve: túnel SSH a partir do PC → ssh -L $WEBUI_PORT:127.0.0.1:$WEBUI_PORT <usuario>@<vps>"
 echo "Depois: Sign Up → Admin Settings → Documents → Embedding Model → nomic-embed-text"
